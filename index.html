@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>電話辨識工具</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(120deg, #f0f4ff, #ffffff);
+      padding: 2em;
+      color: #333;
+    }
+    h2 {
+      color: #2c3e50;
+    }
+    textarea {
+      width: 100%;
+      height: 180px;
+      margin-bottom: 1em;
+      font-family: monospace;
+      padding: 10px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      background: #fff;
+    }
+    button {
+      padding: 10px 16px;
+      margin-right: 10px;
+      background-color: #3498db;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:hover {
+      background-color: #2980b9;
+    }
+    #resultTableWrapper {
+      overflow-x: auto;
+      max-height: 300px;
+      border: 1px solid #ccc;
+      background: #ffffff;
+      padding: 1em;
+      margin-top: 1.5em;
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: monospace;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 10px;
+      text-align: left;
+    }
+    th {
+      background-color: #ecf0f1;
+      color: #2c3e50;
+    }
+  </style>
+</head>
+<body>
+  <h2>📱 電話號碼國家辨識工具</h2>
+  <p>請貼上含有手機號碼的混亂資料：</p>
+  <textarea id="input"></textarea>
+  <button onclick="processPhones()">🔍 辨識電話</button>
+  <button onclick="exportExcel()">📥 匯出 Excel</button>
+
+  <div id="resultTableWrapper">
+    <table id="resultTable" style="display: none;">
+      <thead><tr><th>國碼</th><th>手機電話</th><th>國家名稱</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+<script>
+const countryMap = {
+  '+886': '台灣',
+  '+852': '香港',
+  '+60': '馬來西亞',
+  '+65': '新加坡',
+  '+61': '澳洲',
+  '+84': '越南',
+  '+81': '日本'
+};
+
+const blacklistPrefixes = ['012'];
+let filteredResult = [];
+
+function processPhones() {
+  const raw = document.getElementById("input").value;
+  const lines = raw.split(/\n+/).map(l => l.trim()).filter(Boolean);
+  const cleaned = lines.map(p => p.replace(/[^\d+]/g, ''));
+
+  filteredResult = [];
+  const tbody = document.querySelector("#resultTable tbody");
+  tbody.innerHTML = '';
+
+  for (let num of cleaned) {
+    if (blacklistPrefixes.some(pre => num.startsWith(pre))) continue;
+
+    let matched = false;
+    for (let code of Object.keys(countryMap).sort((a, b) => b.length - a.length)) {
+      if (num.startsWith(code.replace('+','')) || num.startsWith(code)) {
+        let local = num.replace(code, '').replace(code.replace('+',''), '');
+        filteredResult.push([code, local, countryMap[code]]);
+        matched = true;
+        break;
+      }
+    }
+    if (!matched && /^09\d{8}$/.test(num)) {
+      filteredResult.push(['+886', num.slice(1), '台灣']);
+    }
+  }
+
+  filteredResult.forEach(row => {
+    const tr = document.createElement("tr");
+    row.forEach(cell => {
+      const td = document.createElement("td");
+      td.textContent = cell;
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById("resultTable").style.display = filteredResult.length ? '' : 'none';
+}
+
+function exportExcel() {
+  const rows = [["國碼", "手機電話", "國家名稱"], ...filteredResult];
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "電話辨識結果");
+  XLSX.writeFile(wb, "電話辨識結果.xlsx");
+}
+</script>
+</body>
+</html>
