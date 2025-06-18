@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <title>電話辨識工具</title>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -61,6 +62,22 @@
       background-color: #ecf0f1;
       color: #2c3e50;
     }
+    #stats {
+      margin-top: 2em;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+    #summary {
+      flex: 1 1 300px;
+    }
+    #chartContainer {
+      flex: 1 1 300px;
+    }
+    canvas {
+      width: 100% !important;
+      height: auto !important;
+    }
   </style>
 </head>
 <body>
@@ -77,15 +94,23 @@
     </table>
   </div>
 
+  <div id="stats">
+    <div id="summary">
+      <h3>📊 統計資訊</h3>
+      <p id="summaryText"></p>
+    </div>
+    <div id="chartContainer">
+      <canvas id="countryChart"></canvas>
+    </div>
+  </div>
+
 <script>
 const countryMap = {
-  '+886': '台灣',
-  '+852': '香港',
-  '+60': '馬來西亞',
-  '+65': '新加坡',
-  '+61': '澳洲',
-  '+84': '越南',
-  '+81': '日本'
+  '+1': '美國/加拿大', '+44': '英國', '+33': '法國', '+49': '德國', '+81': '日本', '+82': '韓國',
+  '+86': '中國大陸', '+852': '香港', '+853': '澳門', '+886': '台灣', '+60': '馬來西亞',
+  '+65': '新加坡', '+61': '澳洲', '+62': '印尼', '+66': '泰國', '+84': '越南', '+91': '印度',
+  '+7': '俄羅斯', '+34': '西班牙', '+39': '義大利', '+63': '菲律賓', '+95': '緬甸', '+880': '孟加拉',
+  '+673': '汶萊', '+856': '寮國', '+855': '柬埔寨'
 };
 
 const blacklistPrefixes = ['012'];
@@ -93,8 +118,8 @@ let filteredResult = [];
 
 function processPhones() {
   const raw = document.getElementById("input").value;
-  const lines = raw.split(/\n+/).map(l => l.trim()).filter(Boolean);
-  const cleaned = lines.map(p => p.replace(/[^\d+]/g, ''));
+  const lines = raw.split(/[\n,;]+/).map(l => l.trim()).filter(Boolean);
+  const cleaned = lines.map(p => p.replace(/[^+\d]/g, ''));
 
   filteredResult = [];
   const tbody = document.querySelector("#resultTable tbody");
@@ -105,11 +130,13 @@ function processPhones() {
 
     let matched = false;
     for (let code of Object.keys(countryMap).sort((a, b) => b.length - a.length)) {
-      if (num.startsWith(code.replace('+','')) || num.startsWith(code)) {
-        let local = num.replace(code, '').replace(code.replace('+',''), '');
-        filteredResult.push([code, local, countryMap[code]]);
-        matched = true;
-        break;
+      if (num.startsWith(code)) {
+        const local = num.slice(code.length);
+        if (/^\d{6,15}$/.test(local)) {
+          filteredResult.push([code, local, countryMap[code]]);
+          matched = true;
+          break;
+        }
       }
     }
     if (!matched && /^09\d{8}$/.test(num)) {
@@ -128,6 +155,41 @@ function processPhones() {
   });
 
   document.getElementById("resultTable").style.display = filteredResult.length ? '' : 'none';
+  renderStats();
+}
+
+function renderStats() {
+  const summary = document.getElementById("summaryText");
+  const chart = document.getElementById("countryChart");
+  chart.replaceWith(chart.cloneNode(true)); // Reset chart
+  const newChart = document.getElementById("countryChart");
+
+  const countByCountry = {};
+  filteredResult.forEach(r => {
+    const country = r[2];
+    countByCountry[country] = (countByCountry[country] || 0) + 1;
+  });
+  const total = filteredResult.length;
+  const countryCount = Object.keys(countByCountry).length;
+
+  summary.textContent = `共辨識 ${total} 筆電話，涵蓋 ${countryCount} 個國家。`;
+
+  const chartData = {
+    labels: Object.keys(countByCountry),
+    datasets: [{
+      label: '電話數量',
+      data: Object.values(countByCountry),
+      backgroundColor: Object.keys(countByCountry).map(() => `hsl(${Math.random()*360}, 60%, 70%)`),
+    }]
+  };
+  new Chart(newChart, {
+    type: 'pie',
+    data: chartData,
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'right' } }
+    }
+  });
 }
 
 function exportExcel() {
